@@ -109,7 +109,7 @@ object WorkspaceEditHandler {
             if (edit.isLeft) {
               val textEdit = edit.getLeft
               val doc = textEdit.getTextDocument
-              val version = doc.getVersion
+              val version: Int = if (doc.getVersion == null) Int.MaxValue else doc.getVersion
               val uri = FileUtils.sanitizeURI(doc.getUri)
               toApply += (EditorEventManager.forUri(uri) match {
                 case Some(manager) =>

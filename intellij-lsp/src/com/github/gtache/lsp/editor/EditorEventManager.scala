@@ -315,18 +315,21 @@ class EditorEventManager(val editor: Editor, val mouseListener: EditorMouseListe
                 val sub = insertText.drop(i + 1)
                 if (sub.head == '{') {
                   val num = sub.tail.takeWhile(c => c != ':')
-                  val placeholder = sub.tail.dropWhile(c => c != ':').tail.takeWhile(c => c != '}')
+                  // It fails when the completion is surrounded by text
+                  val placeholder = try { sub.tail.dropWhile(c => c != ':').tail.takeWhile(c => c != '}') } catch { case _: Exception => "" }
                   val len = num.length + placeholder.length + 4
-                  (i, i + len, num, placeholder)
+
+                  val value = if (placeholder != "") "$" + num + "$" else ""
+                  (i, i + len, num, placeholder, value)
                 } else {
                   val num = sub.takeWhile(c => c.isDigit)
                   val placeholder = "..."
                   val len = num.length + 1
-                  (i, i + len, num, placeholder)
+                  (i, i + len, num, placeholder, "$" + num + "$")
                 }
               })
               var newInsertText = insertText
-              variables.sortBy(t => -t._1).foreach(t => newInsertText = newInsertText.take(t._1) + "$" + t._3 + "$" + newInsertText.drop(t._2))
+              variables.sortBy(t => -t._1).foreach(t => newInsertText = newInsertText.take(t._1) + t._5 + newInsertText.drop(t._2))
 
               val template = TemplateManager.getInstance(project).createTemplate("anon" + (1 to 5).map(_ => Random.nextPrintableChar()).mkString(""), "lsp")
 
@@ -478,26 +481,26 @@ class EditorEventManager(val editor: Editor, val mouseListener: EditorMouseListe
   def executeCommands(commands: Iterable[Command]): Unit = {
     pool(() => {
       if (!editor.isDisposed) {
-        commands.map(c => {
+        commands
+        .filter(_ != null)
+        .map(c => {
           requestManager.executeCommand(new ExecuteCommandParams(c.getCommand, c.getArguments))
         }).foreach(f => {
-          if (f != null) {
-            try {
-              val ret = f.get(EXECUTE_COMMAND_TIMEOUT, TimeUnit.MILLISECONDS)
-              wrapper.notifySuccess(Timeouts.EXECUTE_COMMAND)
-              ret match {
-                case e: WorkspaceEdit => WorkspaceEditHandler.applyEdit(e, name = "Execute command")
-                case _ =>
-                  LOG.warn("ExecuteCommand returned " + ret)
-              }
-            } catch {
-              case e: TimeoutException =>
-                LOG.warn(e)
-                wrapper.notifyFailure(Timeouts.EXECUTE_COMMAND)
-              case e@(_: java.io.IOException | _: JsonRpcException | _: ExecutionException) =>
-                LOG.warn(e)
-                wrapper.crashed(e.asInstanceOf[Exception])
+          try {
+            val ret = f.get(EXECUTE_COMMAND_TIMEOUT, TimeUnit.MILLISECONDS)
+            wrapper.notifySuccess(Timeouts.EXECUTE_COMMAND)
+            ret match {
+              case e: WorkspaceEdit => WorkspaceEditHandler.applyEdit(e, name = "Execute command")
+              case _ =>
+                LOG.warn("ExecuteCommand returned " + ret)
             }
+          } catch {
+            case e: TimeoutException =>
+              LOG.warn(e)
+              wrapper.notifyFailure(Timeouts.EXECUTE_COMMAND)
+            case e@(_: java.io.IOException | _: JsonRpcException | _: ExecutionException) =>
+              LOG.warn(e)
+              wrapper.crashed(e.asInstanceOf[Exception])
           }
         })
       }

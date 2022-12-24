@@ -17,6 +17,7 @@ import org.eclipse.lsp4j.CodeAction
 class LSPCodeActionFix(uri: String, codeAction: CodeAction) extends LocalQuickFix {
 
   override def applyFix(project: Project, descriptor: ProblemDescriptor): Unit = {
+    val LOG = Logger.getInstance(classOf[LSPCodeActionFix])
     descriptor.getPsiElement match {
       case _: LSPPsiElement =>
         if (codeAction.getEdit != null) WorkspaceEditHandler.applyEdit(codeAction.getEdit, codeAction.getTitle)
