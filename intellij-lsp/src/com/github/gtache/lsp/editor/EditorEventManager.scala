@@ -315,17 +315,19 @@ class EditorEventManager(val editor: Editor, val mouseListener: EditorMouseListe
                 val sub = insertText.drop(i + 1)
                 if (sub.head == '{') {
                   val num = sub.tail.takeWhile(c => c != ':')
-                  // It fails when the completion is surrounded by text
+
                   val placeholder = try { sub.tail.dropWhile(c => c != ':').tail.takeWhile(c => c != '}') } catch { case _: Exception => "" }
                   val len = num.length + placeholder.length + 4
 
-                  val value = if (placeholder != "") "$" + num + "$" else ""
-                  (i, i + len, num, placeholder, value)
+                  val variableName = if (placeholder != "") num.replaceAll("[^A-Za-z0-9]", "") else null
+                  val value = if (variableName != null) "$" + variableName + "$" else ""
+
+                  (i, i + len, variableName, placeholder, value)
                 } else {
-                  val num = sub.takeWhile(c => c.isDigit)
+                  val variableName = sub.takeWhile(c => c.isDigit)
                   val placeholder = "..."
-                  val len = num.length + 1
-                  (i, i + len, num, placeholder, "$" + num + "$")
+                  val len = variableName.length + 1
+                  (i, i + len, variableName, placeholder, "$" + variableName + "$")
                 }
               })
               var newInsertText = insertText
@@ -333,11 +335,14 @@ class EditorEventManager(val editor: Editor, val mouseListener: EditorMouseListe
 
               val template = TemplateManager.getInstance(project).createTemplate("anon" + (1 to 5).map(_ => Random.nextPrintableChar()).mkString(""), "lsp")
 
-              variables.foreach(t => {
-                template.addVariable(t._3, new TextExpression(t._4), new TextExpression(t._4), true, false)
+              variables
+                .filter(_._3 != null)
+                .foreach(t => {
+                template.addVariable(t._3, new TextExpression(t._4), new TextExpression(""), true, false)
               })
+              template.addVariable("END", new TextExpression(""), new TextExpression(""), true, false)
               template.setInline(true)
-              template.asInstanceOf[TemplateImpl].setString(newInsertText)
+              template.asInstanceOf[TemplateImpl].setString(newInsertText + "$END$")
               template
             }
 
@@ -373,7 +378,14 @@ class EditorEventManager(val editor: Editor, val mouseListener: EditorMouseListe
             def runSnippet(template: Template): Unit = {
               invokeLater(() => {
                 writeAction(() => CommandProcessor.getInstance().executeCommand(project, () => editor.getDocument.insertString(editor.getCaretModel.getOffset, template.getTemplateText), "snippetInsert", "lsp", editor.getDocument))
+                // TODO: following line throwing error:
+                // No segment for variable: var=0; name=0}; anonRM6@A
+                // Template#name: lsp/anonRM6@A
+                // Template#string: Integer
+                // Template#text: Integer; offset: 3455
+                // java.lang.Throwable
                 TemplateManager.getInstance(project).startTemplate(editor, template)
+
                 if (addTextEdits != null) {
                   applyEdit(edits = addTextEdits.asScala, name = "Additional Completions : " + label)
                 }
