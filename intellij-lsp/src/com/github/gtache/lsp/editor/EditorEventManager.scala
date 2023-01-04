@@ -340,7 +340,7 @@ class EditorEventManager(val editor: Editor, val mouseListener: EditorMouseListe
                 .foreach(t => {
                 template.addVariable(t._3, new TextExpression(t._4), new TextExpression(""), true, false)
               })
-              template.addVariable("END", new TextExpression(""), new TextExpression(""), true, false)
+              template.addVariable("END", new TextExpression(""), new TextExpression(""), false, false)
               template.setInline(true)
               template.asInstanceOf[TemplateImpl].setString(newInsertText + "$END$")
               template
@@ -499,7 +499,7 @@ class EditorEventManager(val editor: Editor, val mouseListener: EditorMouseListe
           requestManager.executeCommand(new ExecuteCommandParams(c.getCommand, c.getArguments))
         }).foreach(f => {
           try {
-            val ret = f.get(EXECUTE_COMMAND_TIMEOUT, TimeUnit.MILLISECONDS)
+            val ret = if (f != null) f.get(EXECUTE_COMMAND_TIMEOUT, TimeUnit.MILLISECONDS) else null
             wrapper.notifySuccess(Timeouts.EXECUTE_COMMAND)
             ret match {
               case e: WorkspaceEdit => WorkspaceEditHandler.applyEdit(e, name = "Execute command")
