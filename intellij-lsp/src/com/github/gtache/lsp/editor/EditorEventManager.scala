@@ -54,7 +54,7 @@ import scala.util.Random
 
 object EditorEventManager {
   private val PREPARE_DOC_THRES = 10 //Time between requests when ctrl is pressed (10ms)
-  private val SHOW_DOC_THRES: Long = EditorSettingsExternalizable.getInstance().getQuickDocOnMouseOverElementDelayMillis - PREPARE_DOC_THRES
+  private val SHOW_DOC_THRES: Long = EditorSettingsExternalizable.getInstance().  getQuickDocOnMouseOverElementDelayMillis - PREPARE_DOC_THRES
 
   private val uriToManager: mutable.Map[String, EditorEventManager] = mutable.HashMap()
   private val editorToManager: mutable.Map[Editor, EditorEventManager] = mutable.HashMap()
@@ -378,12 +378,6 @@ class EditorEventManager(val editor: Editor, val mouseListener: EditorMouseListe
             def runSnippet(template: Template): Unit = {
               invokeLater(() => {
                 writeAction(() => CommandProcessor.getInstance().executeCommand(project, () => editor.getDocument.insertString(editor.getCaretModel.getOffset, template.getTemplateText), "snippetInsert", "lsp", editor.getDocument))
-                // TODO: following line throwing error:
-                // No segment for variable: var=0; name=0}; anonRM6@A
-                // Template#name: lsp/anonRM6@A
-                // Template#string: Integer
-                // Template#text: Integer; offset: 3455
-                // java.lang.Throwable
                 TemplateManager.getInstance(project).startTemplate(editor, template)
 
                 if (addTextEdits != null) {
@@ -400,7 +394,7 @@ class EditorEventManager(val editor: Editor, val mouseListener: EditorMouseListe
                 }
                 execCommand(command)
                 if (moveToCaret) {
-                  editor.getCaretModel.moveCaretRelatively(textEdit.getNewText.length, 0, false, false, true)
+                  editor.getCaretModel.moveCaretRelatively(textEdit.getNewText.length, 1, false, false, true)
                 }
               })
             }
@@ -1448,17 +1442,31 @@ class EditorEventManager(val editor: Editor, val mouseListener: EditorMouseListe
               DocumentUtils.LSPPosToOffset(editor, te.getRange.getEnd)),
               te.getNewText)
           }).foreach(markerText => {
-            val start = markerText._1.getStartOffset
-            val end = markerText._1.getEndOffset
             val text = markerText._2
+            val start = markerText._1.getStartOffset
+            val end = Math.max(markerText._1.getEndOffset, start + text.length)
+
+            LOG.info("start" + start)
+            LOG.info("end" + end)
+            LOG.info("text" + text)
+            LOG.info("marker text" + markerText)
+
+            if (text != null && text.nonEmpty) {
+              // Move it to the end before inserting.
+              // This alleviate the unexpected behavior then moving it to the end underneath.
+              editor.getCaretModel.moveToOffset(end)
+            }
+
             if (text == "" || text == null) {
               document.deleteString(start, end)
             } else if (end - start <= 0) {
               document.insertString(start, text)
             } else {
-              document.replaceString(start, end, text)
+              document.insertString(start, text)
             }
             markerText._1.dispose()
+            // Move at the end of the inserted text, not the new line.
+            invokeLater(() => editor.getCaretModel.moveToOffset(start + text.length))
           })
           saveDocument()
         }
@@ -1482,6 +1490,7 @@ class EditorEventManager(val editor: Editor, val mouseListener: EditorMouseListe
   def reformatSelection(): Unit = {
     pool(() => {
       if (!editor.isDisposed) {
+
         val params = new DocumentRangeFormattingParams()
         params.setTextDocument(identifier)
         val selectionModel = editor.getSelectionModel
@@ -1489,6 +1498,11 @@ class EditorEventManager(val editor: Editor, val mouseListener: EditorMouseListe
         val end = computableReadAction(() => selectionModel.getSelectionEnd)
         val startingPos = DocumentUtils.offsetToLSPPos(editor, start)
         val endPos = DocumentUtils.offsetToLSPPos(editor, end)
+
+        LOG.info("reformatting stuff")
+        LOG.info("end of selection" + end)
+        LOG.info("endPos of selection" + endPos)
+
         params.setRange(new Range(startingPos, endPos))
         val options = new FormattingOptions() //TODO
         params.setOptions(options)
