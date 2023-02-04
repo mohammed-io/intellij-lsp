@@ -1444,12 +1444,7 @@ class EditorEventManager(val editor: Editor, val mouseListener: EditorMouseListe
           }).foreach(markerText => {
             val text = markerText._2
             val start = markerText._1.getStartOffset
-            val end = Math.max(markerText._1.getEndOffset, start + text.length)
-
-            LOG.info("start" + start)
-            LOG.info("end" + end)
-            LOG.info("text" + text)
-            LOG.info("marker text" + markerText)
+            val end = markerText._1.getEndOffset
 
             if (text != null && text.nonEmpty) {
               // Move it to the end before inserting.
@@ -1459,8 +1454,6 @@ class EditorEventManager(val editor: Editor, val mouseListener: EditorMouseListe
 
             if (text == "" || text == null) {
               document.deleteString(start, end)
-            } else if (end - start <= 0) {
-              document.insertString(start, text)
             } else {
               document.insertString(start, text)
             }
